@@ -1,3 +1,5 @@
+import 'core-js/es6/map';
+
 let strayPromises = [];
 let isInstalled = false;
 // Internal promise reference counter
