@@ -4,8 +4,7 @@
   "description": "Jasmine test helper for detecting async Promise usage outside of test boundaries",
   "main": "dist/jasmine-stray-promises.js",
   "scripts": {
-    "test": "true",
-    ".test": "npm run eslint && npm run karma -- --single-run --reporters=progress,coverage",
+    "test": "npm run eslint && npm run karma -- --single-run --reporters=progress,coverage",
     "test:dev": "npm run karma -- --reporters=mocha,coverage",
     "eslint": "eslint src/**/*.js test/**/*.js",
     "karma": "cross-env NODE_ENV=test karma start",
