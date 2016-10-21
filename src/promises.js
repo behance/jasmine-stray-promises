@@ -32,21 +32,24 @@ function rebindResolver(fn, localIdx) {
  * @param {Function} thenablePrototype
  * @returns {Function}
  */
-function rebindThenable(thenablePrototype) {
+function rebindThenable(method, thenablePrototype) {
   return function reboundThenable(...args) {
     const localIdx = idx++;
 
     // must throw the error for PhantomJS to generate the stack trace
     let err;
     try {
-      throw new Error('Promise resolved outside test constraints');
+      throw new Error(`Promise "${method}" with id "${localIdx}" resolved outside test constraints`);
     }
     catch (e) {
       err = e;
     }
     strayPromises.push({
       id: localIdx,
-      err
+      promise: this,
+      args,
+      err,
+      method
     });
 
     return thenablePrototype.apply(
@@ -67,7 +70,7 @@ function wirePromiseHooks() {
     protoCache.isInstalled = true;
     WATCHED_PROMISE_METHODS.forEach((method) => {
       if (typeof promiseImpl.prototype[method] === 'function') {
-        promiseImpl.prototype[method] = rebindThenable(protoCache[method]);
+        promiseImpl.prototype[method] = rebindThenable(method, protoCache[method]);
       }
     });
   });
@@ -146,7 +149,7 @@ export function setupPromiseDetection() {
  *
  * @throws {Error}
  */
-export function detectStrayPromises() {
+export function detectStrayPromises(done) {
   // find stray promises from current tests
   const localStrayPromises = [...strayPromises];
 
@@ -154,7 +157,33 @@ export function detectStrayPromises() {
   strayPromises = [];
 
   if (!this.__strayPromisesIgnored && localStrayPromises.length > 0) {
-    let firstStrayPromise = localStrayPromises.shift();
-    throw firstStrayPromise.err;
+    let unresolvedPromises = [...localStrayPromises];
+
+    Promise.all(
+      localStrayPromises.map((val) => {
+        // Must clear up any "catch" statements that were never called
+        return Promise.resolve(val.promise)
+        .then((data) => {
+          if (val.method === 'catch' || (val.method === 'then' && !val.args[0])) {
+            unresolvedPromises = unresolvedPromises.filter(({ id }) => id !== val.id);
+          }
+          return data;
+        })
+        .catch(() => {
+          unresolvedPromises = unresolvedPromises.filter(({ id }) => id !== val.id);
+        });
+      })
+    )
+    .then(function() {
+      if (unresolvedPromises.length > 0) {
+        const firstStrayPromise = unresolvedPromises.shift();
+        throw firstStrayPromise.err;
+      }
+    })
+    .then(done)
+    .catch(done.fail);
+  }
+  else {
+    done();
   }
 }
