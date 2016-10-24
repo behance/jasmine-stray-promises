@@ -2,6 +2,7 @@ import 'core-js/es6/map';
 
 let strayPromises = [];
 let isInstalled = false;
+let isCleaningUp = false;
 // Internal promise reference counter
 let idx = 0;
 
@@ -21,7 +22,13 @@ function rebindResolver(fn, localIdx) {
     return fn;
   }
   return function reboundResolver() {
-    strayPromises = strayPromises.filter(({ id }) => id !== localIdx);
+    strayPromises.some((promise) => {
+      if (promise.id !== localIdx || isCleaningUp) {
+        return false;
+      }
+      promise.hasBeenCalled = true;
+      return true;
+    });
     return fn.apply(this, arguments);
   };
 }
@@ -47,6 +54,7 @@ function rebindThenable(method, thenablePrototype) {
     strayPromises.push({
       id: localIdx,
       promise: this,
+      hasBeenCalled: false,
       args,
       err,
       method
@@ -138,6 +146,7 @@ export function uninstall() {
  */
 export function setupPromiseDetection() {
   strayPromises = [];
+  isCleaningUp = false;
 
   this._ignoreStrayPromises = () => {
     this.__strayPromisesIgnored = true;
@@ -152,36 +161,39 @@ export function setupPromiseDetection() {
 export function detectStrayPromises(done) {
   // find stray promises from current tests
   const localStrayPromises = [...strayPromises];
+  isCleaningUp = true;
 
   // reset timer cache for next test
   strayPromises = [];
 
   if (!this.__strayPromisesIgnored && localStrayPromises.length > 0) {
-    let unresolvedPromises = [...localStrayPromises];
+    let unresolvedPromises = [...localStrayPromises].filter(({ hasBeenCalled }) => !hasBeenCalled);
 
     Promise.all(
       localStrayPromises.map((val) => {
         // Must clear up any "catch" statements that were never called
         return Promise.resolve(val.promise)
         .then((data) => {
-          if (val.method === 'catch' || (val.method === 'then' && !val.args[0])) {
+          if (val.method === 'catch' || (val.method === 'then' && !val.args[0]) && val.hasBeenCalled) {
             unresolvedPromises = unresolvedPromises.filter(({ id }) => id !== val.id);
           }
           return data;
         })
         .catch(() => {
-          unresolvedPromises = unresolvedPromises.filter(({ id }) => id !== val.id);
+          if (val.hasBeenCalled) {
+            unresolvedPromises = unresolvedPromises.filter(({ id }) => id !== val.id);
+          }
         });
       })
     )
     .then(function() {
+      isCleaningUp = false;
       if (unresolvedPromises.length > 0) {
         const firstStrayPromise = unresolvedPromises.shift();
         throw firstStrayPromise.err;
       }
     })
-    .then(done)
-    .catch(done.fail);
+    .then(done, done.fail);
   }
   else {
     done();
