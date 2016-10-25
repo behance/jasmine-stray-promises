@@ -75,7 +75,7 @@ function rebindThenable(method, thenablePrototype) {
       args.map((fn) => rebindResolver(fn, localIdx))
     );
 
-    // keep an handy call stack reference
+    // keep a handy call stack reference
     promiseData.promise = this;
 
     return newPromise;
@@ -195,7 +195,6 @@ export function detectStrayPromises(done) {
 
   if (!this.__strayPromisesIgnored && localStrayPromises.length > 0) {
     let unresolvedPromises = [...localStrayPromises].filter(({ hasBeenCalled }) => !hasBeenCalled);
-    // debugger;
 
     function filterUnresolved(val) {
       unresolvedPromises = unresolvedPromises.filter(({ id }) => id !== val.id);
