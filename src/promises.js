@@ -54,7 +54,9 @@ function rebindThenable(method, thenablePrototype) {
     // must throw the error for PhantomJS to generate the stack trace
     let err;
     try {
-      throw new Error(`Promise "${method}" with id "${localIdx}" resolved outside test constraints`);
+      // Use this error message during development
+      // throw new Error(`Promise "${method}" with id "${localIdx}" resolved outside test constraints`);
+      throw new Error(`Promise "${method}" resolved outside test constraints`);
     }
     catch (e) {
       err = e;

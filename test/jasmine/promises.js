@@ -80,7 +80,7 @@ describe('promises', function() {
       doneSpy.fail = jasmine.createSpy('done.fail').and.callFake((err) => {
         // calls through complete promise stack to determine if any are not supposed to be executed
         expect(spy).toHaveBeenCalled();
-        expect(err.message).toMatch(/Promise "then" .+ resolved outside test constraints/);
+        expect(err.message).toMatch(/Promise ".+?".+resolved outside test constraints/);
         done();
       });
 
@@ -96,7 +96,7 @@ describe('promises', function() {
       doneSpy.fail = jasmine.createSpy('done.fail').and.callFake((err) => {
         // calls through complete promise stack to determine if any are not supposed to be executed
         expect(spy).toHaveBeenCalled();
-        expect(err.message).toMatch(/Promise "then" .+ resolved outside test constraints/);
+        expect(err.message).toMatch(/Promise ".+?".+resolved outside test constraints/);
         done();
       });
 
@@ -111,7 +111,7 @@ describe('promises', function() {
       const doneSpy = jasmine.createSpy('done').and.callFake(done.fail);
       doneSpy.fail = jasmine.createSpy('done.fail').and.callFake((err) => {
         expect(spy).toHaveBeenCalled();
-        expect(err.message).toMatch(/Promise ".+?" .+ resolved outside test constraints/);
+        expect(err.message).toMatch(/Promise ".+?".+resolved outside test constraints/);
         done();
       });
 
