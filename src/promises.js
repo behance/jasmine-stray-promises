@@ -18,29 +18,37 @@ const WATCHED_PROMISE_IMPLEMENTATIONS = new Map();
  * @returns {Function|*}
  */
 function rebindResolver(fn, localIdx) {
-  if (typeof fn !== 'function') {
+  if (typeof fn !== 'function' || isCleaningUp) {
     return fn;
   }
-  return function reboundResolver() {
-    strayPromises.some((promise) => {
-      if (promise.id !== localIdx || isCleaningUp) {
+  function reboundResolver() {
+    strayPromises.some((strayPromise) => {
+      if (strayPromise.id !== localIdx || isCleaningUp) {
         return false;
       }
-      promise.hasBeenCalled = true;
+      strayPromise.hasBeenCalled = true;
       return true;
     });
     return fn.apply(this, arguments);
-  };
+  }
+  // this is useful for debugging
+  // reboundResolver.originalFn = String(fn);
+  return reboundResolver;
 }
 
 /**
  * Rebind a thenable callback
  *
+ * @param {String} method
  * @param {Function} thenablePrototype
  * @returns {Function}
  */
 function rebindThenable(method, thenablePrototype) {
   return function reboundThenable(...args) {
+    if (isCleaningUp) {
+      return thenablePrototype.apply(this, args);
+    }
+
     const localIdx = idx++;
 
     // must throw the error for PhantomJS to generate the stack trace
@@ -51,19 +59,24 @@ function rebindThenable(method, thenablePrototype) {
     catch (e) {
       err = e;
     }
-    strayPromises.push({
+    const promiseData = {
       id: localIdx,
-      promise: this,
       hasBeenCalled: false,
       args,
       err,
       method
-    });
+    };
+    strayPromises.push(promiseData);
 
-    return thenablePrototype.apply(
+    const newPromise = thenablePrototype.apply(
       this,
       args.map((fn) => rebindResolver(fn, localIdx))
     );
+
+    // keep an handy call stack reference
+    promiseData.promise = this;
+
+    return newPromise;
   };
 }
 
@@ -107,6 +120,9 @@ function unwirePromiseHooks() {
  * @param {Function} promiseImpl
  */
 export function watchPromiseImplementation(promiseImpl) {
+  if (WATCHED_PROMISE_IMPLEMENTATIONS.has(promiseImpl)) {
+    return;
+  }
   const protoCache = {};
   WATCHED_PROMISE_METHODS.forEach((method) => {
     if (typeof promiseImpl.prototype[method] === 'function') {
@@ -117,6 +133,15 @@ export function watchPromiseImplementation(promiseImpl) {
   if (isInstalled) {
     wirePromiseHooks();
   }
+}
+
+/**
+ * Mark a specific Promise implementation as "unwatched"
+ *
+ * @param {Function} promiseImpl
+ */
+export function unwatchPromiseImplementation(promiseImpl) {
+  WATCHED_PROMISE_IMPLEMENTATIONS.delete(promiseImpl);
 }
 
 /**
@@ -168,20 +193,28 @@ export function detectStrayPromises(done) {
 
   if (!this.__strayPromisesIgnored && localStrayPromises.length > 0) {
     let unresolvedPromises = [...localStrayPromises].filter(({ hasBeenCalled }) => !hasBeenCalled);
+    // debugger;
+
+    function filterUnresolved(val) {
+      unresolvedPromises = unresolvedPromises.filter(({ id }) => id !== val.id);
+    }
 
     Promise.all(
-      localStrayPromises.map((val) => {
+      [...unresolvedPromises].map((val) => {
+        const isCatchStatement = val.method === 'catch' || (val.method === 'then' && !val.args[0]);
+        const isThenStatement = val.method === 'then' && typeof val.args[0] === 'function';
         // Must clear up any "catch" statements that were never called
-        return Promise.resolve(val.promise)
+        return val.promise
         .then((data) => {
-          if (val.method === 'catch' || (val.method === 'then' && !val.args[0]) && val.hasBeenCalled) {
-            unresolvedPromises = unresolvedPromises.filter(({ id }) => id !== val.id);
+          // filter out catch clauses where the resolution of the promise was a success
+          if (isCatchStatement) {
+            filterUnresolved(val);
           }
           return data;
         })
         .catch(() => {
-          if (val.hasBeenCalled) {
-            unresolvedPromises = unresolvedPromises.filter(({ id }) => id !== val.id);
+          if ((val.hasBeenCalled && isCatchStatement) || isThenStatement) {
+            filterUnresolved(val);
           }
         });
       })
