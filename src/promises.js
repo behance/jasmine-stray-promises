@@ -2,6 +2,7 @@ import 'core-js/es6/map';
 
 let strayPromises = [];
 let isInstalled = false;
+let isCleaningUp = false;
 // Internal promise reference counter
 let idx = 0;
 
@@ -17,42 +18,67 @@ const WATCHED_PROMISE_IMPLEMENTATIONS = new Map();
  * @returns {Function|*}
  */
 function rebindResolver(fn, localIdx) {
-  if (typeof fn !== 'function') {
+  if (typeof fn !== 'function' || isCleaningUp) {
     return fn;
   }
-  return function reboundResolver() {
-    strayPromises = strayPromises.filter(({ id }) => id !== localIdx);
+  function reboundResolver() {
+    strayPromises.some((strayPromise) => {
+      if (strayPromise.id !== localIdx || isCleaningUp) {
+        return false;
+      }
+      strayPromise.hasBeenCalled = true;
+      return true;
+    });
     return fn.apply(this, arguments);
-  };
+  }
+  // this is useful for debugging
+  // reboundResolver.originalFn = String(fn);
+  return reboundResolver;
 }
 
 /**
  * Rebind a thenable callback
  *
+ * @param {String} method
  * @param {Function} thenablePrototype
  * @returns {Function}
  */
-function rebindThenable(thenablePrototype) {
+function rebindThenable(method, thenablePrototype) {
   return function reboundThenable(...args) {
+    if (isCleaningUp) {
+      return thenablePrototype.apply(this, args);
+    }
+
     const localIdx = idx++;
 
     // must throw the error for PhantomJS to generate the stack trace
     let err;
     try {
-      throw new Error('Promise resolved outside test constraints');
+      // Use this error message during development
+      // throw new Error(`Promise "${method}" with id "${localIdx}" resolved outside test constraints`);
+      throw new Error(`Promise "${method}" resolved outside test constraints`);
     }
     catch (e) {
       err = e;
     }
-    strayPromises.push({
+    const promiseData = {
       id: localIdx,
-      err
-    });
+      hasBeenCalled: false,
+      args,
+      err,
+      method
+    };
+    strayPromises.push(promiseData);
 
-    return thenablePrototype.apply(
+    const newPromise = thenablePrototype.apply(
       this,
       args.map((fn) => rebindResolver(fn, localIdx))
     );
+
+    // keep a handy call stack reference
+    promiseData.promise = this;
+
+    return newPromise;
   };
 }
 
@@ -67,7 +93,7 @@ function wirePromiseHooks() {
     protoCache.isInstalled = true;
     WATCHED_PROMISE_METHODS.forEach((method) => {
       if (typeof promiseImpl.prototype[method] === 'function') {
-        promiseImpl.prototype[method] = rebindThenable(protoCache[method]);
+        promiseImpl.prototype[method] = rebindThenable(method, protoCache[method]);
       }
     });
   });
@@ -96,6 +122,9 @@ function unwirePromiseHooks() {
  * @param {Function} promiseImpl
  */
 export function watchPromiseImplementation(promiseImpl) {
+  if (WATCHED_PROMISE_IMPLEMENTATIONS.has(promiseImpl)) {
+    return;
+  }
   const protoCache = {};
   WATCHED_PROMISE_METHODS.forEach((method) => {
     if (typeof promiseImpl.prototype[method] === 'function') {
@@ -106,6 +135,15 @@ export function watchPromiseImplementation(promiseImpl) {
   if (isInstalled) {
     wirePromiseHooks();
   }
+}
+
+/**
+ * Mark a specific Promise implementation as "unwatched"
+ *
+ * @param {Function} promiseImpl
+ */
+export function unwatchPromiseImplementation(promiseImpl) {
+  WATCHED_PROMISE_IMPLEMENTATIONS.delete(promiseImpl);
 }
 
 /**
@@ -135,6 +173,7 @@ export function uninstall() {
  */
 export function setupPromiseDetection() {
   strayPromises = [];
+  isCleaningUp = false;
 
   this._ignoreStrayPromises = () => {
     this.__strayPromisesIgnored = true;
@@ -146,15 +185,51 @@ export function setupPromiseDetection() {
  *
  * @throws {Error}
  */
-export function detectStrayPromises() {
+export function detectStrayPromises(done) {
   // find stray promises from current tests
   const localStrayPromises = [...strayPromises];
+  isCleaningUp = true;
 
   // reset timer cache for next test
   strayPromises = [];
 
   if (!this.__strayPromisesIgnored && localStrayPromises.length > 0) {
-    let firstStrayPromise = localStrayPromises.shift();
-    throw firstStrayPromise.err;
+    let unresolvedPromises = [...localStrayPromises].filter(({ hasBeenCalled }) => !hasBeenCalled);
+
+    function filterUnresolved(val) {
+      unresolvedPromises = unresolvedPromises.filter(({ id }) => id !== val.id);
+    }
+
+    Promise.all(
+      [...unresolvedPromises].map((val) => {
+        const isCatchStatement = val.method === 'catch' || (val.method === 'then' && !val.args[0]);
+        const isThenStatement = val.method === 'then' && typeof val.args[0] === 'function';
+        // Must clear up any "catch" statements that were never called
+        return val.promise
+        .then((data) => {
+          // filter out catch clauses where the resolution of the promise was a success
+          if (isCatchStatement) {
+            filterUnresolved(val);
+          }
+          return data;
+        })
+        .catch(() => {
+          if ((val.hasBeenCalled && isCatchStatement) || isThenStatement) {
+            filterUnresolved(val);
+          }
+        });
+      })
+    )
+    .then(function() {
+      isCleaningUp = false;
+      if (unresolvedPromises.length > 0) {
+        const firstStrayPromise = unresolvedPromises.shift();
+        throw firstStrayPromise.err;
+      }
+    })
+    .then(done, done.fail);
+  }
+  else {
+    done();
   }
 }
