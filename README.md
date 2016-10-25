@@ -52,7 +52,7 @@ describe('foo', function() {
 #### Other Promise implementations
 
 By default `jasmine-stray-promises` hook into the `window.Promise` implementation, but custom ones can be added as long as they
-implement the thenable interface (i.e. has a "then" method on it's prototype).
+implement the thenable interface (i.e. has a "then" method on its prototype).
 
 ```javascript
 const bluebird = require('bluebird');
@@ -66,6 +66,17 @@ Stray promises can be debugged by passing the following env variable to the test
 
 ```sh
 process.env.STRAY_PROMISE_DEBUG = true
+```
+
+Or within a test suite.
+
+```javascript
+describe('foo', function() {
+
+  it('bar', function() {
+    this._enableStrayPromisesDebugging();
+  });
+});
 ```
 
 ## Output

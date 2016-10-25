@@ -7,7 +7,8 @@ let isCleaningUp = false;
 let idx = 0;
 
 /* global process */
-const isDebug = (typeof process !== 'undefined' && process.env && process.env.STRAY_PROMISE_DEBUG);
+const globalDebugMode = (typeof process !== 'undefined' && process.env && process.env.STRAY_PROMISE_DEBUG);
+let isDebug = globalDebugMode;
 
 const WATCHED_PROMISE_METHODS = ['then', 'catch'];
 const WATCHED_PROMISE_IMPLEMENTATIONS = new Map();
@@ -182,9 +183,14 @@ export function uninstall() {
 export function setupPromiseDetection() {
   strayPromises = [];
   isCleaningUp = false;
+  isDebug = globalDebugMode;
 
   this._ignoreStrayPromises = () => {
     this.__strayPromisesIgnored = true;
+  };
+
+  this._enableStrayPromisesDebugging = () => {
+    isDebug = true;
   };
 }
 
