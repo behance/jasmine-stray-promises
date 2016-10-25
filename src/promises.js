@@ -6,6 +6,10 @@ let isCleaningUp = false;
 // Internal promise reference counter
 let idx = 0;
 
+/* global process */
+const globalDebugMode = (typeof process !== 'undefined' && process.env && process.env.STRAY_PROMISE_DEBUG);
+let isDebug = globalDebugMode;
+
 const WATCHED_PROMISE_METHODS = ['then', 'catch'];
 const WATCHED_PROMISE_IMPLEMENTATIONS = new Map();
 
@@ -31,8 +35,9 @@ function rebindResolver(fn, localIdx) {
     });
     return fn.apply(this, arguments);
   }
-  // this is useful for debugging
-  // reboundResolver.originalFn = String(fn);
+  if (isDebug) {
+    reboundResolver.originalFn = String(fn);
+  }
   return reboundResolver;
 }
 
@@ -55,8 +60,12 @@ function rebindThenable(method, thenablePrototype) {
     let err;
     try {
       // Use this error message during development
-      // throw new Error(`Promise "${method}" with id "${localIdx}" resolved outside test constraints`);
-      throw new Error(`Promise "${method}" resolved outside test constraints`);
+      if (isDebug) {
+        throw new Error(`Promise "${method}" with id "${localIdx}" resolved outside test constraints`);
+      }
+      else {
+        throw new Error(`Promise "${method}" resolved outside test constraints`);
+      }
     }
     catch (e) {
       err = e;
@@ -174,9 +183,14 @@ export function uninstall() {
 export function setupPromiseDetection() {
   strayPromises = [];
   isCleaningUp = false;
+  isDebug = globalDebugMode;
 
   this._ignoreStrayPromises = () => {
     this.__strayPromisesIgnored = true;
+  };
+
+  this._enableStrayPromisesDebugging = () => {
+    isDebug = true;
   };
 }
 
@@ -224,6 +238,14 @@ export function detectStrayPromises(done) {
       isCleaningUp = false;
       if (unresolvedPromises.length > 0) {
         const firstStrayPromise = unresolvedPromises.shift();
+        if (isDebug) {
+          firstStrayPromise.args.forEach((arg) => {
+            if (typeof arg !== 'function') {
+              return;
+            }
+            console.log('Stray promise', firstStrayPromise.id, firstStrayPromise.method, String(arg.fn || arg));
+          });
+        }
         throw firstStrayPromise.err;
       }
     })

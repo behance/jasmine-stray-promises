@@ -216,5 +216,25 @@ describe('promises', function() {
         detectStrayPromises.call(this, doneSpy);
       });
     });
+
+    describe('jasmine#_enableStrayPromisesDebugging', function() {
+      it('should throw with a debugging error if promises executed outside of test when chaining then', function(done) {
+        this._enableStrayPromisesDebugging();
+
+        const spy = jasmine.createSpy('promise callback');
+        const promise = (new Promise((resolve) => setTimeout(resolve, 100)));
+        promise.then(spy);
+
+        const doneSpy = jasmine.createSpy('done').and.callFake(done.fail);
+        doneSpy.fail = jasmine.createSpy('done.fail').and.callFake((err) => {
+          // calls through complete promise stack to determine if any are not supposed to be executed
+          expect(spy).toHaveBeenCalled();
+          expect(err.message).toMatch(/Promise ".+?" with id ".+" resolved outside test constraints/);
+          done();
+        });
+
+        detectStrayPromises.call(this, doneSpy);
+      });
+    });
   });
 });

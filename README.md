@@ -29,6 +29,56 @@ module.exports = function(config) {
 };
 ```
 
+#### Ignoring stray promises in a test
+
+Stray promises can be ignored in a single test or in a suite by calling `this._ignoreStrayPromises` in the jasmine test context.
+
+```javascript
+function asyncCall() {
+  Promise.resolve('baz')
+  .then(() => { /* do something */ });
+}
+
+describe('foo', function() {
+
+  it('bar', function() {
+    this._ignoreStrayPromises();
+
+    asyncCall();
+  });
+});
+```
+
+#### Other Promise implementations
+
+By default `jasmine-stray-promises` hook into the `window.Promise` implementation, but custom ones can be added as long as they
+implement the thenable interface (i.e. has a "then" method on its prototype).
+
+```javascript
+const bluebird = require('bluebird');
+
+window._watchPromiseImplementation(bluebird);
+```
+
+#### Debugging
+
+Stray promises can be debugged by passing the following env variable to the test runner/compiler.
+
+```sh
+process.env.STRAY_PROMISE_DEBUG = true
+```
+
+Or within a test suite.
+
+```javascript
+describe('foo', function() {
+
+  it('bar', function() {
+    this._enableStrayPromisesDebugging();
+  });
+});
+```
+
 ## Output
 
 If test code executed a timer and didn't wait for it to resolve before ending the test, it will throw an error.
