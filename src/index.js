@@ -5,7 +5,7 @@ import {
   uninstall,
   setupPromiseDetection,
   detectStrayPromises,
-  watchPromiseImplementation
+  watchPromiseImplementation,
 } from './promises';
 
 // assign function so it can be used to hook up additional Promise libs

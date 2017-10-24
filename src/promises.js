@@ -75,7 +75,7 @@ function rebindThenable(method, thenablePrototype) {
       hasBeenCalled: false,
       args,
       err,
-      method
+      method,
     };
     strayPromises.push(promiseData);
 
@@ -224,40 +224,40 @@ export function detectStrayPromises(done) {
         const isThenStatement = val.method === 'then' && typeof val.args[0] === 'function';
         // Must clear up any "catch" statements that were never called
         return val.promise
-        .then((data) => {
+          .then((data) => {
           // filter out catch clauses where the resolution of the promise was a success
-          if (isCatchStatement) {
-            filterUnresolved(val);
-          }
-          return data;
-        })
-        .catch(() => {
-          if ((val.hasBeenCalled && isCatchStatement) || isThenStatement) {
-            filterUnresolved(val);
-          }
-        });
+            if (isCatchStatement) {
+              filterUnresolved(val);
+            }
+            return data;
+          })
+          .catch(() => {
+            if ((val.hasBeenCalled && isCatchStatement) || isThenStatement) {
+              filterUnresolved(val);
+            }
+          });
       })
     )
-    .then(() => {
-      isCleaningUp = false;
-      if (unresolvedPromises.length > 0) {
-        const firstStrayPromise = unresolvedPromises.shift();
-        if (isDebug) {
-          firstStrayPromise.args.forEach((arg) => {
-            if (typeof arg !== 'function') {
-              return;
-            }
-            console.log('Stray promise', firstStrayPromise.id, firstStrayPromise.method, String(arg.fn || arg));
-          });
+      .then(() => {
+        isCleaningUp = false;
+        if (unresolvedPromises.length > 0) {
+          const firstStrayPromise = unresolvedPromises.shift();
+          if (isDebug) {
+            firstStrayPromise.args.forEach((arg) => {
+              if (typeof arg !== 'function') {
+                return;
+              }
+              console.log('Stray promise', firstStrayPromise.id, firstStrayPromise.method, String(arg.fn || arg));
+            });
+          }
+          if (this.__onlyWarnOnStrayPromises) {
+            console.warn(firstStrayPromise.err.message);
+            return;
+          }
+          throw firstStrayPromise.err;
         }
-        if (this.__onlyWarnOnStrayPromises) {
-          console.warn(firstStrayPromise.err.message);
-          return;
-        }
-        throw firstStrayPromise.err;
-      }
-    })
-    .then(done, done.fail);
+      })
+      .then(done, done.fail);
   }
   else {
     done();

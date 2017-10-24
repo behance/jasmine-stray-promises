@@ -5,7 +5,7 @@ import {
   setupPromiseDetection,
   detectStrayPromises,
   watchPromiseImplementation,
-  unwatchPromiseImplementation
+  unwatchPromiseImplementation,
 } from '../../src/promises';
 
 describe('promises', function() {
@@ -54,7 +54,6 @@ describe('promises', function() {
       });
     });
   });
-
 
   describe('#detectStrayPromises', function() {
     beforeAll(function() {
@@ -174,8 +173,8 @@ describe('promises', function() {
 
       const promise = (new Promise((resolve, reject) => setTimeout(reject, 15)));
       promise.catch(spyCatch)
-      .then(() => new Promise((resolve) => setTimeout(resolve, 1000)))
-      .then(spyThen);
+        .then(() => new Promise((resolve) => setTimeout(resolve, 1000)))
+        .then(spyThen);
 
       const doneSpy = jasmine.createSpy('done').and.callFake(() => {
         expect(spyCatch).toHaveBeenCalled();
