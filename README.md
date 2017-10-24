@@ -49,6 +49,26 @@ describe('foo', function() {
 });
 ```
 
+#### Only print warning on stray promises in a test
+
+Stray promises errors can be ignored (but will still be waited on), and an error can be printed in a single test or in a suite by calling `this._onlyWarnOnStrayPromises` in the jasmine test context.
+
+```javascript
+function asyncCall() {
+  Promise.resolve('baz')
+  .then(() => { /* do something */ });
+}
+
+describe('foo', function() {
+
+  it('bar', function() {
+    this._onlyWarnOnStrayPromises();
+
+    asyncCall();
+  });
+});
+```
+
 #### Other Promise implementations
 
 By default `jasmine-stray-promises` hook into the `window.Promise` implementation, but custom ones can be added as long as they

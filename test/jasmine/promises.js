@@ -5,7 +5,7 @@ import {
   setupPromiseDetection,
   detectStrayPromises,
   watchPromiseImplementation,
-  unwatchPromiseImplementation
+  unwatchPromiseImplementation,
 } from '../../src/promises';
 
 describe('promises', function() {
@@ -54,7 +54,6 @@ describe('promises', function() {
       });
     });
   });
-
 
   describe('#detectStrayPromises', function() {
     beforeAll(function() {
@@ -174,8 +173,8 @@ describe('promises', function() {
 
       const promise = (new Promise((resolve, reject) => setTimeout(reject, 15)));
       promise.catch(spyCatch)
-      .then(() => new Promise((resolve) => setTimeout(resolve, 1000)))
-      .then(spyThen);
+        .then(() => new Promise((resolve) => setTimeout(resolve, 1000)))
+        .then(spyThen);
 
       const doneSpy = jasmine.createSpy('done').and.callFake(() => {
         expect(spyCatch).toHaveBeenCalled();
@@ -205,13 +204,59 @@ describe('promises', function() {
 
       it('should not throw if promises executed outside of test with _ignoreStrayPromises using catch', function(done) {
         const spy = jasmine.createSpy('promise callback');
-        const promise = (new Promise((resolve) => setTimeout(resolve, 10)));
+        const promise = (new Promise((resolve, reject) => setTimeout(reject, 10)));
         promise.catch(spy);
 
         const doneSpy = jasmine.createSpy('done').and.callFake(done);
         doneSpy.fail = jasmine.createSpy('done.fail').and.callFake(done.fail);
 
         this._ignoreStrayPromises();
+
+        detectStrayPromises.call(this, doneSpy);
+      });
+    });
+
+    describe('jasmine#_onlyWarnOnStrayPromises', function() {
+      it('should not throw if promises executed outside of test with _onlyWarnOnStrayPromises using then', function(done) {
+        const spy = jasmine.createSpy('promise callback');
+        spyOn(console, 'warn').and.callThrough();
+        const promise = (new Promise((resolve) => setTimeout(resolve, 10)));
+        promise.then(spy);
+
+        const doneSpy = jasmine.createSpy('done').and.callFake(() => {
+          try {
+            expect(console.warn).toHaveBeenCalledWith('Promise "then" resolved outside test constraints');
+            done();
+          }
+          catch (e) {
+            done.fail(e);
+          }
+        });
+        doneSpy.fail = jasmine.createSpy('done.fail').and.callFake(done.fail);
+
+        this._onlyWarnOnStrayPromises();
+
+        detectStrayPromises.call(this, doneSpy);
+      });
+
+      it('should not throw if promises executed outside of test with _onlyWarnOnStrayPromises using catch', function(done) {
+        const spy = jasmine.createSpy('promise callback');
+        spyOn(console, 'warn').and.callThrough();
+        const promise = (new Promise((resolve, reject) => setTimeout(reject, 10)));
+        promise.catch(spy);
+
+        const doneSpy = jasmine.createSpy('done').and.callFake(() => {
+          try {
+            expect(console.warn).toHaveBeenCalledWith('Promise "catch" resolved outside test constraints');
+            done();
+          }
+          catch (e) {
+            done.fail(e);
+          }
+        });
+        doneSpy.fail = jasmine.createSpy('done.fail').and.callFake(done.fail);
+
+        this._onlyWarnOnStrayPromises();
 
         detectStrayPromises.call(this, doneSpy);
       });
