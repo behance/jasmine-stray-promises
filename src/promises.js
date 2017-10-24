@@ -189,6 +189,10 @@ export function setupPromiseDetection() {
     this.__strayPromisesIgnored = true;
   };
 
+  this._onlyWarnOnStrayPromises = () => {
+    this.__onlyWarnOnStrayPromises = true;
+  };
+
   this._enableStrayPromisesDebugging = () => {
     isDebug = true;
   };
@@ -234,7 +238,7 @@ export function detectStrayPromises(done) {
         });
       })
     )
-    .then(function() {
+    .then(() => {
       isCleaningUp = false;
       if (unresolvedPromises.length > 0) {
         const firstStrayPromise = unresolvedPromises.shift();
@@ -245,6 +249,10 @@ export function detectStrayPromises(done) {
             }
             console.log('Stray promise', firstStrayPromise.id, firstStrayPromise.method, String(arg.fn || arg));
           });
+        }
+        if (this.__onlyWarnOnStrayPromises) {
+          console.warn(firstStrayPromise.err.message);
+          return;
         }
         throw firstStrayPromise.err;
       }
